@@ -3205,6 +3205,7 @@ export const createTestDependencies = (overrides: {
     chatService,
     approvalDecisionService,
     closeApprovalResumeEffectJournal: async () => undefined,
+    conversationTurnCoordination: { shutdown: async () => undefined },
     conversationOwnershipService,
     conversationIngestService,
     conversationOperatorDirectory,
