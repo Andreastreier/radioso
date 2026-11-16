@@ -11,7 +11,7 @@ import { validateBody } from "../../app/http/middleware/validate.js";
 import { forbidden, notFound } from "../../shared/domain/errors.js";
 import { copilotProposalPermissions, copilotProposalTargetTypes, type CopilotProposalTargetType } from "./contracts.js";
 import { summarizeProposalEvidence } from "./proposalEvidence.js";
-import type { LlmCapabilityResolveInput } from "../../shared/infra/llm/workspaceContext.js";
+import { createChatReadiness, type ChatCapabilityProbe } from "../../shared/infra/llm/chatReadiness.js";
 import { copilotTurnRequestSchema, type CopilotConversation, type CopilotMessage, type CopilotSseEvent, type CopilotToolDescriptor, CopilotAuthorizationError, CopilotConflictError, CopilotNotFoundError } from "./public.js";
 import type { AccountPermission } from "../account/public.js";
 import type { OperatorCopilotService } from "./public.js";
@@ -59,16 +59,13 @@ interface CopilotRouteDependencies extends WorkspaceSessionDependencies {
       permission: AccountPermission;
     }): Promise<boolean>;
   };
-  llmCapabilityResolver: ChatCapabilityProbePort;
+  llmCapabilityResolver: ChatCapabilityProbe;
   operatorCopilotService: OperatorCopilotService;
   /** Read only for its permission declarations; the turn itself runs against the service's catalog. */
   copilotToolCatalog: ReadonlyArray<Pick<CopilotToolDescriptor, "requiredPermissions">>;
 }
 
 /** Ray only asks whether the workspace has a usable chat model; it never resolves a call config. */
-interface ChatCapabilityProbePort {
-  resolve(capability: "chat", input: LlmCapabilityResolveInput): Promise<unknown>;
-}
 
 export const createCopilotRoutes = (dependencies: CopilotRouteDependencies): Router => {
   const router = Router();
@@ -245,12 +242,10 @@ const availability = async (dependencies: Pick<CopilotRouteDependencies, "accoun
   const { workspaceId, accountId, userId, principal } = sessionLocals(res);
   const canManage = await dependencies.accountAccessService.hasPermission({ accountId, userId, principal, workspaceId, permission: "workspace.agents.manage" });
   const targets = await applyableProposalTargets(dependencies, res);
-  try {
-    await dependencies.llmCapabilityResolver.resolve("chat", { workspaceId });
-    return { available: true, reason: "ok", canManage, applyableProposalTargets: targets };
-  } catch {
-    return { available: false, reason: "no_llm_capability", canManage, applyableProposalTargets: targets };
-  }
+  // The same check the workspace summary's `llmConfigured` and the starter pack make.
+  return await createChatReadiness(dependencies.llmCapabilityResolver).isChatConfigured(workspaceId)
+    ? { available: true, reason: "ok", canManage, applyableProposalTargets: targets }
+    : { available: false, reason: "no_llm_capability", canManage, applyableProposalTargets: targets };
 };
 const presentConversation = (result: { conversation: CopilotConversation; messages: ReadonlyArray<CopilotMessage> }): unknown => ({ id: result.conversation.id, title: result.conversation.title, status: result.conversation.status, messages: result.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, createdAt: message.createdAt.toISOString(), ...(message.role === "copilot" ? { outcome: message.outcome, activity: message.activity ?? [], proposals: message.proposals ?? [] } : {}) })) });
 const sendCopilotSse = async (res: Response, events: AsyncIterable<CopilotSseEvent>): Promise<void> => {

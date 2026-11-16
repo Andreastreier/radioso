@@ -10,9 +10,7 @@ import {
   markOnboardingCompleted,
 } from '@/lib/onboarding-storage'
 
-export { markOnboardingActive, markOnboardingCompleted } from '@/lib/onboarding-storage'
-
-export const SAMPLE_DOCUMENTS = [
+const SAMPLE_DOCUMENTS = [
   {
     title: 'Getting Started with Radioso',
     slug: 'getting-started',
@@ -52,12 +50,6 @@ Workspace settings control retrieval behavior such as rewrite, rerank, chunking,
   },
 ] as const
 
-export const SAMPLE_QUESTIONS = [
-  'How do I get started with Radioso locally?',
-  'How does Radioso use my documents as context?',
-  'Which environment variables matter most for local setup?',
-] as const
-
 export interface WorkspaceOnboardingState {
   isLoading: boolean
   refresh: () => Promise<void>
@@ -68,6 +60,8 @@ export interface WorkspaceOnboardingState {
   hasCompletedChat: boolean
   sampleDocumentsImported: boolean
   websiteCrawlerEnabled: boolean
+  /** Whether the workspace can make chat model calls; null until the summary loads. Read it with `isLlmMissing`. */
+  llmConfigured: boolean | null
   isOnboardingActive: boolean
   isOnboardingCompleted: boolean
   shouldShowFirstRun: boolean
@@ -106,6 +100,7 @@ export const useWorkspaceOnboarding = (
   const [sampleDocumentsImported, setSampleDocumentsImported] = useState(false)
   const [hasCompletedChat, setHasCompletedChat] = useState(false)
   const [websiteCrawlerEnabled, setWebsiteCrawlerEnabled] = useState(true)
+  const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null)
   const [isOnboardingActive, setIsOnboardingActive] = useState(false)
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false)
   const [isImportingSampleDocs, setIsImportingSampleDocs] = useState(false)
@@ -119,6 +114,7 @@ export const useWorkspaceOnboarding = (
       setHasReadyDocuments(false)
       setSampleDocumentsImported(false)
       setHasCompletedChat(false)
+      setLlmConfigured(null)
       setIsOnboardingActive(false)
       setIsOnboardingCompleted(false)
       loadedWorkspaceIdRef.current = null
@@ -157,6 +153,7 @@ export const useWorkspaceOnboarding = (
       setSampleDocumentsImported(summary.sampleDocumentsImported)
       setHasCompletedChat(summary.hasCompletedChat)
       setWebsiteCrawlerEnabled(summary.websiteCrawlerEnabled)
+      setLlmConfigured(summary.llmConfigured)
       setIsOnboardingCompleted(nextCompleted)
       setIsOnboardingActive(nextActive)
     } finally {
@@ -253,6 +250,7 @@ export const useWorkspaceOnboarding = (
       hasCompletedChat,
       sampleDocumentsImported,
       websiteCrawlerEnabled,
+      llmConfigured,
       isOnboardingActive,
       isOnboardingCompleted,
       shouldShowFirstRun: isOnboardingActive && !isOnboardingCompleted && !hasCompletedChat,
@@ -271,6 +269,7 @@ export const useWorkspaceOnboarding = (
     isLoading,
     isOnboardingActive,
     isOnboardingCompleted,
+    llmConfigured,
     markActive,
     markCompleted,
     refresh,

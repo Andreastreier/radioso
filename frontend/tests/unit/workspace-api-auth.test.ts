@@ -138,6 +138,7 @@ describe('workspace API auth', () => {
         hasCompletedChat: false,
         sampleDocumentsImported: false,
         websiteCrawlerEnabled: true,
+        llmConfigured: true,
       }),
     )
     vi.stubGlobal('fetch', fetchMock)

@@ -1,4 +1,9 @@
 import { createAgentBundleServices } from "../../src/app/composition/agentBundleComposition.js";
+import { buildStarterPackDraftService } from "../../src/app/composition/agentStarterPackComposition.js";
+import { StarterPackApplyService } from "../../src/modules/agentStarterPack/public.js";
+import { createInMemoryStarterPackApply } from "./inMemoryStarterPackApplyUnitOfWork.js";
+import { LlmResponseLanguageDetector } from "../../src/shared/services/responseLanguageDetector.js";
+import { createChatReadiness } from "../../src/shared/infra/llm/chatReadiness.js";
 import { InMemoryAgentBundleImportRepository } from "./inMemoryAgentBundleImports.js";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -767,6 +772,8 @@ export const createTestDependencies = (overrides: {
   applicationRouteMounts?: ApplicationRouteMount[];
   workbenchReplayRunner?: Pick<WorkbenchReplayRunner, "run">;
   chatInferencePipelineComplete?: AppDependencies["chatInferencePipeline"]["complete"];
+  /** Replaces the default resolver, which reports every workspace as having no chat model. */
+  llmCapabilityResolver?: AppDependencies["llmCapabilityResolver"];
   logger?: AppDependencies["logger"];
   skillExecutorRegistry?: SkillExecutorRegistry;
   agentSkillTurnSkillProvider?: AgentSkillTurnSkillProvider;
@@ -1299,8 +1306,14 @@ export const createTestDependencies = (overrides: {
     },
   } satisfies TurnRouter;
   const workspaceService = new WorkspaceService(workspaceRepository, auditService, accountMembershipRepository);
+  const llmCapabilityResolver: AppDependencies["llmCapabilityResolver"] = overrides.llmCapabilityResolver ?? {
+    async resolve() {
+      throw new Error("Workspace LLM capability resolution is not configured in the in-memory test app");
+    },
+  };
   const workspaceSummaryService = new WorkspaceSummaryService(documentRepository, conversationRepository, {
     websiteCrawlerEnabled: env.WEBSITE_CRAWLER_ENABLED,
+    chatReadiness: createChatReadiness(llmCapabilityResolver),
   });
   const workspaceSessionService = new WorkspaceSessionService(workspaceService);
   const abuseControlService = new AbuseControlService(
@@ -1658,6 +1671,30 @@ export const createTestDependencies = (overrides: {
     actionCatalog: [{ type: "contact.send", kind: "action" }],
     logger,
     telemetryService,
+  });
+  const starterPackDraftService = buildStarterPackDraftService({
+    agentRepository,
+    authoredDirectiveService,
+    routineDefinitionService,
+    routineDraftAssistService,
+    chatInferencePipeline,
+    languageDetector: new LlmResponseLanguageDetector(chatInferencePipeline),
+    // The in-memory app answers every model call through its fake chat pipeline, so its
+    // workspaces always count as having a chat model.
+    chatReadiness: { assertChatConfigured: async () => undefined },
+    logger,
+    telemetryService,
+  });
+  const inMemoryStarterPackApply = createInMemoryStarterPackApply({ authoredDirectiveService, routineDefinitionService });
+  const starterPackApplyService = new StarterPackApplyService({
+    unitOfWork: inMemoryStarterPackApply.unitOfWork,
+    findCompletedApply: inMemoryStarterPackApply.findCompletedApply,
+    assessCoherence: (inputWorkspaceId, agentId, candidates) =>
+      authoredDirectiveService.assessCoherence(inputWorkspaceId, agentId, candidates),
+    afterRoutineCommitted: (inputWorkspaceId, agentId, routine) =>
+      routineDefinitionService.completeExternalDraftMutation(inputWorkspaceId, agentId, routine),
+    audit: auditService,
+    logger,
   });
   const agentSurfaceExtensions = new AgentSurfaceExtensionRegistry();
   // Mimic an EE deployment for OSS contract/unit tests so the runtime gate on
@@ -2287,11 +2324,7 @@ export const createTestDependencies = (overrides: {
     externalSkillDefinitionService,
     webhookDestinations,
     workspaceLlmCapabilitySettingsService,
-    llmCapabilityResolver: {
-      async resolve() {
-        throw new Error("Workspace LLM capability resolution is not configured in the in-memory test app");
-      },
-    },
+    llmCapabilityResolver,
     authService,
     apiPrincipalAuthenticator,
     apiPrincipalRouteInventory,
@@ -2401,6 +2434,8 @@ export const createTestDependencies = (overrides: {
     routineDefinitionService,
     routineDraftAssistService,
     directiveAuthorService,
+    starterPackDraftService,
+    starterPackApplyService,
     agentSurfaceExtensions,
     skillCatalogService,
     skillAuthoringCatalog,
@@ -2487,6 +2522,8 @@ export const createTestApp = (overrides: {
   applicationRouteMounts?: ApplicationRouteMount[];
   workbenchReplayRunner?: Pick<WorkbenchReplayRunner, "run">;
   chatInferencePipelineComplete?: AppDependencies["chatInferencePipeline"]["complete"];
+  /** Replaces the default resolver, which reports every workspace as having no chat model. */
+  llmCapabilityResolver?: AppDependencies["llmCapabilityResolver"];
   logger?: AppDependencies["logger"];
   skillExecutorRegistry?: SkillExecutorRegistry;
   agentSkillTurnSkillProvider?: AgentSkillTurnSkillProvider;

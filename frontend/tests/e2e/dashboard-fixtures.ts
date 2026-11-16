@@ -822,6 +822,7 @@ const buildWorkspaceSummary = (input: {
     hasCompletedChat: conversationCount > 0,
     sampleDocumentsImported: sampleDocumentSlugs.length > 0,
     websiteCrawlerEnabled: true,
+    llmConfigured: true,
   };
 };
 

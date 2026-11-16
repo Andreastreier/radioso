@@ -146,7 +146,7 @@ export const isProviderCredentialError = (error: unknown): error is ProviderErro
   return code === "invalid_api_key" || status === 401;
 };
 
-export const getProviderCredentialErrorMessage = () =>
+const getProviderCredentialErrorMessage = () =>
   "The AI provider rejected the credentials. Replace the workspace API key at Settings → Credentials, or update the matching environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_COMPATIBLE_API_KEY) and restart Radioso.";
 
 export const normalizeProviderCredentialError = (error: unknown) => {
@@ -158,6 +158,32 @@ export const normalizeProviderCredentialError = (error: unknown) => {
     reason: getMessage(error),
     providerIssue: "credentials_rejected",
   });
+};
+
+/**
+ * Log-safe description of a failed model call: the error class plus the provider's structural
+ * status, code and type (for example 429 / credit_balance_exhausted / insufficient_quota). The
+ * provider's message text is left out, since it can echo account details.
+ */
+export const describeProviderFailure = (error: unknown): {
+  err: string;
+  providerStatus?: number;
+  providerCode?: string;
+  providerErrorType?: string;
+} => {
+  if (!error || typeof error !== "object") {
+    return { err: "unknown" };
+  }
+  const providerError = error as ProviderErrorShape;
+  const status = getStatus(providerError);
+  const code = getCode(providerError);
+  const type = providerError.error?.type;
+  return {
+    err: error instanceof Error ? error.name : "unknown",
+    ...(typeof status === "number" ? { providerStatus: status } : {}),
+    ...(typeof code === "string" ? { providerCode: code } : {}),
+    ...(typeof type === "string" ? { providerErrorType: type } : {}),
+  };
 };
 
 export const getProviderFailureReason = (error: unknown) => {

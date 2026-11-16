@@ -59,6 +59,9 @@ import { ContextVariableRepository } from "../../db/repositories/contextVariable
 import { AccessGrantLifecycleUnitOfWork } from "../../db/repositories/accessGrantRepository.js";
 import { ContextVariableService } from "../../modules/context-variables/public.js";
 import { createAgentBundleServices } from "../composition/agentBundleComposition.js";
+import { buildStarterPackApplyService, buildStarterPackDraftService } from "../composition/agentStarterPackComposition.js";
+import { createChatReadiness } from "../../shared/infra/llm/chatReadiness.js";
+import { LlmResponseLanguageDetector } from "../../shared/services/responseLanguageDetector.js";
 import { createConnectorIngestionPort } from "../../modules/connectors/services/connectorIngestionPort.js";
 import { ConnectorManagementService } from "../../modules/connectors/services/connectorManagementService.js";
 import { resolveWebsiteCrawlerConfig } from "../../modules/websiteCrawler/config.js";
@@ -405,6 +408,28 @@ export const buildDependencies = (env: Env = getEnv(), options: BuildDependencie
     routineDefinitionService,
     routineDraftAssistService,
   } = routineAuthoring;
+  const starterPackDraftService = buildStarterPackDraftService({
+    agentRepository: repositories.agentRepository,
+    authoredDirectiveService,
+    routineDefinitionService,
+    routineDraftAssistService,
+    chatInferencePipeline,
+    // Language detection is a short classification call, so it runs on the rewrite tier, as chat's own detector does.
+    languageDetector: new LlmResponseLanguageDetector(
+      llmRegistry.createRewriteInferencePipeline(infrastructure.usageEventRecorder),
+    ),
+    chatReadiness: createChatReadiness(llmCapabilityResolver),
+    logger,
+    telemetryService: infrastructure.telemetryService,
+  });
+  const starterPackApplyService = buildStarterPackApplyService({
+    db: infrastructure.database.kysely,
+    authoredDirectiveService,
+    authoringServicesOn: routineAuthoring.authoringServicesOn,
+    routineDefinitionService,
+    auditService: infrastructure.auditService,
+    logger,
+  });
   // Constructed only once the routine authoring services exist: the agent-revision release
   // gate needs RoutineDefinitionService's skill/capability/webhook-aware validation
   // (validateForServing) to reject a candidate or publish whose enabled routine references a
@@ -1016,6 +1041,8 @@ export const buildDependencies = (env: Env = getEnv(), options: BuildDependencie
     routineDefinitionService,
     routineDraftAssistService,
     directiveAuthorService,
+    starterPackDraftService,
+    starterPackApplyService,
     agentSurfaceExtensions,
     skillCatalogService,
     skillAuthoringCatalog,

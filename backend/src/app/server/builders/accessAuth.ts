@@ -20,6 +20,7 @@ import {
 } from "../../../modules/security/credentials/services/workspaceProviderCredentialsService.js";
 import { WorkspaceService, WorkspaceSummaryService } from "../../../modules/workspace/public.js";
 import type { OrganizationCreationGuard } from "../../../shared/domain/organizationCreationGuard.js";
+import type { ChatReadiness } from "../../../shared/infra/llm/chatReadiness.js";
 import type { AccessGrantLifecycleUnitOfWorkPort } from "../../../modules/accessGrants/ports.js";
 import { type AppLogger } from "../../../shared/observability/logger.js";
 import type { Database } from "../../../shared/infra/database.js";
@@ -199,6 +200,7 @@ export const buildWorkspaceServices = (input: {
   personalCredentialTermination?: import("../../../modules/workspace/services/workspaceService.js").WorkspacePersonalCredentialTerminationPort;
   personalCredentialLifecycle?: import("../../../modules/machineAccess/public.js").PersonalCredentialLifecyclePort;
   workspaceRepository: WorkspaceRepository;
+  chatReadiness: Pick<ChatReadiness, "isChatConfigured">;
 }) => {
   const workspaceService = new WorkspaceService(
     input.workspaceRepository,
@@ -212,6 +214,7 @@ export const buildWorkspaceServices = (input: {
     workspaceSessionService: new WorkspaceSessionService(workspaceService),
     workspaceSummaryService: new WorkspaceSummaryService(input.documentRepository, input.conversationRepository, {
       websiteCrawlerEnabled: input.env.WEBSITE_CRAWLER_ENABLED,
+      chatReadiness: input.chatReadiness,
     }),
   };
 };

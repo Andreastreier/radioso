@@ -9,6 +9,7 @@ import { AgentBundleImportRepository } from "../../../db/repositories/agentBundl
 import { IdentityNonceRepository } from "../../../db/repositories/identityNonceRepository.js";
 import { RoutineDefinitionRepository } from "../../../db/repositories/routineDefinitionRepository.js";
 import type { AgentSkillSettingsRegistry, AgentSurfaceExtensionRegistry } from "../../../modules/agents/public.js";
+import type { Db } from "../../../shared/infra/kysely/types.js";
 import { AuditEventRepository } from "../../../db/repositories/auditEventRepository.js";
 import { BootstrapGreetingCacheRepository } from "../../../db/repositories/bootstrapGreetingCacheRepository.js";
 import { ConversationRepository } from "../../../db/repositories/conversationRepository.js";
@@ -168,6 +169,8 @@ export const buildRepositories = (
   accessGrantRepository: new AccessGrantRepository(database.kysely),
   agentConverseSessionMappingRepository: new AgentConverseSessionMappingRepository(database.kysely),
   agentRepository: new AgentRepository(database.kysely, options.agentSurfaceExtensions, options.agentSkillSettings),
+  /** The same agent repository bound to a caller's transaction, for composition-owned atomic writes. */
+  agentRepositoryOn: (db: Db) => new AgentRepository(db, options.agentSurfaceExtensions, options.agentSkillSettings),
   agentRevisionRepository: new AgentRevisionRepository(database.kysely),
   agentBundleImportRepository: new AgentBundleImportRepository(database.kysely),
   bootstrapGreetingCacheRepository: new BootstrapGreetingCacheRepository(database.kysely),
